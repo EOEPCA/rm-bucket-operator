@@ -39,5 +39,5 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
         repository: eoepca/rm-bucket-operator
-        build_args: JAR_FILE=package
+        build_args: JAR_FILE=bucket-operator.jar
         tag_with_ref: true        
