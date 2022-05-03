@@ -7,12 +7,13 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import eoepca.crd.BucketResource;
 import eoepca.crd.BucketResourceDoneable;
 import eoepca.crd.BucketResourceList;
-import io.fabric8.kubernetes.api.model.apiextensions.v1beta1.CustomResourceDefinition;
-import io.fabric8.kubernetes.api.model.apiextensions.v1beta1.CustomResourceDefinitionBuilder;
+import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition;
+import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinitionVersion;
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.NonNamespaceOperation;
 import io.fabric8.kubernetes.client.dsl.Resource;
+import io.fabric8.kubernetes.client.dsl.base.CustomResourceDefinitionContext;
 import io.fabric8.kubernetes.internal.KubernetesDeserializer;
 import lombok.extern.log4j.Log4j2;
 import org.apache.http.HeaderElement;
@@ -52,6 +53,7 @@ import java.io.InputStreamReader;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Configuration
@@ -77,14 +79,29 @@ public class Config {
 	public NonNamespaceOperation<BucketResource, BucketResourceList, BucketResourceDoneable, Resource<BucketResource, BucketResourceDoneable>> bucketClient(KubernetesClient defaultClient) {
 		return Tracer.Throwing("registering Bucket CRD", () -> {
 			KubernetesDeserializer.registerCustomKind("epca.eo/v1alpha1", "Bucket", BucketResource.class);
-			CustomResourceDefinition crd = defaultClient.customResourceDefinitions().createOrReplace(new CustomResourceDefinitionBuilder().
-				withApiVersion("apiextensions.k8s.io/v1beta1").
-				withNewMetadata().withName("buckets.epca.eo").endMetadata().
-				withNewSpec().withGroup("epca.eo").withVersion("v1alpha1").withScope("Namespaced").
-				withNewNames().withKind("Bucket").withShortNames("bucket").withPlural("buckets").endNames().endSpec().
-				build());
+			CustomResourceDefinition crd = kubernetesClient().apiextensions().v1()
+				.customResourceDefinitions()
+				.list()
+				.getItems()
+				.stream()
+				.filter(d -> "buckets.epca.eo".equals(d.getMetadata().getName()))
+				.findAny()
+				.orElseThrow(					
+				() -> new RuntimeException("Deployment error: CRD 'buckets.epca.eo' not found!"));
+			List<CustomResourceDefinitionVersion> crdVersions = crd.getSpec().getVersions();
+			if (crdVersions.size() > 1) {
+				log.info("more than one version for CRD 'buckets.epca.eo' found, default to latest: {}", crd.getSpec());
+			}
+			CustomResourceDefinitionContext crdContext = new CustomResourceDefinitionContext.Builder()
+				.withGroup(crd.getSpec().getGroup())
+				.withScope(crd.getSpec().getScope())
+				.withName(crd.getMetadata().getName())
+				.withVersion(crdVersions.get(crdVersions.size() - 1).getName()) // latest
+				.withPlural(crd.getSpec().getNames().getPlural())
+				.withKind(crd.getSpec().getNames().getKind())
+				.build();
 			return defaultClient
-				.customResources(crd, BucketResource.class, BucketResourceList.class, BucketResourceDoneable.class)
+				.customResources(crdContext, BucketResource.class, BucketResourceList.class, BucketResourceDoneable.class)
 				.inNamespace(masterNamespace);
 		});
 	}
