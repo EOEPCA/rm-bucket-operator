@@ -13,9 +13,25 @@ spec:
     shortNames:
       - bucket
     singular: bucket
-  preserveUnknownFields: true
   scope: Namespaced
   versions:
     - name: v1alpha1
       served: true
       storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                name:
+                  type: string
+                bucketName:
+                  type: string
+                secretName:
+                  type: string
+                secretNamespace:
+                  type: string
+                creationTimestamp:
+                  type: string
